@@ -125,7 +125,7 @@ train.tarps[complete.cases(train.tarps), ]
 set.seed(100)
 haiti.tarp.knn.cv<-train(
   tarp~Red+Green+Blue,
-  data=train.haiti.data,
+  data=train.tarps,
   method="knn",
   preProcess=c("center", "scale"),
   tuneGrid=data.frame(k=seq(1,20,1)),
@@ -178,7 +178,7 @@ lda_perf <- confusionMatrix(lda.pred, test.tarps$tarp, positive = "Yes")
 lda_perf
 
 lda_folds_CM <- haiti.tarp.lda$pred %>%
-  dplyr::mutate(pred2 = ifelse(Yes > threshold, "Yes", "No")) %>%
+  dplyr::mutate(pred2 = ifelse(Yes > .5, "Yes", "No")) %>%
   dplyr::mutate(pred2 = factor(pred2, levels = c("No", "Yes"))) %>%
   dplyr::group_split(Resample) %>%
   purrr::map( ~ caret::confusionMatrix(data=.x$pred2, reference=.x$obs, positive="Yes"))
