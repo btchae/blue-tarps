@@ -1,0 +1,427 @@
+---
+title: "DS 6030 Final Project"
+author: "Brian Chae"
+date: "12/2/2021"
+output: pdf_document
+---
+Brian Chae
+xsx6eu
+*Introduction*
+The goal of this project is to explore various classification algorithms using the disaster relief. We are trying to see which classification algorithm is best suited for blue tarps.
+
+*Methods*
+I will be using R and RStudio for this project.
+Will be using KNN, SVM
+
+*Exploratory Data Analysis*
+```{r}
+library(caret)
+library(caTools)
+library(dplyr)
+library(readxl)
+library(doParallel)
+library(ROCR)
+registerDoParallel()
+getDoParWorkers()
+#First I want to compare the training and the hold out datasets to make sure there there is consistency
+#We need to combine the hold out dataset
+#getwd()
+#holdout1 <- read_excel('./HoldOut.xlsx', col_names = TRUE, sheet= 'orthovinr057')
+#head(holdout1)
+#holdout2 <- read_excel('./HoldOut.xlsx', col_names = TRUE, sheet= 'orthovinr067nbt')
+#holdout3 <- read_excel('./HoldOut.xlsx', col_names = TRUE, sheet= 'orthovnir069nbt')
+#holdout4 <- read_excel('./HoldOut.xlsx', col_names = TRUE, sheet= 'orthovinr078nbt')
+#holdout5 <- read_excel('./HoldOut.xlsx', col_names = TRUE, sheet= 'orthovinr067bt')
+#holdout6 <- read_excel('./HoldOut.xlsx', col_names = TRUE, sheet= 'orthovnir069bt')
+#holdout7 <- read_excel('./HoldOut.xlsx', col_names = TRUE, sheet= 'orthovinr078bt')
+haiti_one <- read.csv2("./HaitiPixels.csv", header=TRUE, sep = ",")
+head(haiti_one)
+#Checking if Class is a categorical variable
+#is.factor(haiti_one$Class)
+haiti_one$Class<-as.factor(haiti_one$Class)
+#is.factor(haiti_one$Class)
+#Add a true/false feature for whether or not its a blue tarp
+haiti_one$tarp<-ifelse(haiti_one$Class=="Blue Tarp", "Yes", "No")
+#head(haiti_one) Checking if it was added
+is.factor(haiti_one$tarp)
+haiti_one$tarp <- as.factor(haiti_one$tarp)
+is.factor(haiti_one$tarp)
+#################Cleaning data####################
+#holdout1$Class <- "Other"
+#holdout2$Class <- "Other"
+#holdout3$Class <- "Other"
+#holdout4$Class <- "Other"
+#holdout5$Class <- "Blue Tarp"
+#holdout6$Class <- "Blue Tarp"
+#holdout7$Class <- "Blue Tarp"
+#names(holdout1)[names(holdout1) == "B1"] <- "Red"
+#names(holdout1)[names(holdout1) == "B2"] <- "Green"
+#names(holdout1)[names(holdout1) == "B3"] <- "Blue"
+#names(holdout2)[names(holdout2) == "B1"] <- "Red"
+#names(holdout2)[names(holdout2) == "B2"] <- "Green"
+#names(holdout2)[names(holdout2) == "B3"] <- "Blue"
+#names(holdout3)[names(holdout3) == "B1"] <- "Red"
+#names(holdout3)[names(holdout3) == "B2"] <- "Green"
+#names(holdout3)[names(holdout3) == "B3"] <- "Blue"
+#names(holdout4)[names(holdout4) == "B1"] <- "Red"
+#names(holdout4)[names(holdout4) == "B2"] <- "Green"
+#names(holdout4)[names(holdout4) == "B3"] <- "Blue"
+#names(holdout5)[names(holdout5) == "B1"] <- "Red"
+#names(holdout5)[names(holdout5) == "B2"] <- "Green"
+#names(holdout5)[names(holdout5) == "B3"] <- "Blue"
+#names(holdout6)[names(holdout6) == "B1"] <- "Red"
+#names(holdout6)[names(holdout6) == "B2"] <- "Green"
+#names(holdout6)[names(holdout6) == "B3"] <- "Blue"
+#names(holdout7)[names(holdout7) == "B1"] <- "Red"
+#names(holdout7)[names(holdout7) == "B2"] <- "Green"
+#names(holdout7)[names(holdout7) == "B3"] <- "Blue"
+#drops <- c("X","Y", "Map X", "Map Y", "Lat", "Lon")
+#holdout1 = holdout1[ , !(names(holdout1) %in% drops)]
+#holdout2 = holdout2[ , !(names(holdout2) %in% drops)]
+#holdout3 = holdout3[ , !(names(holdout3) %in% drops)]
+#holdout4 = holdout4[ , !(names(holdout4) %in% drops)]
+#holdout5 = holdout5[ , !(names(holdout5) %in% drops)]
+#holdout6 = holdout6[ , !(names(holdout6) %in% drops)]
+#holdout7 = holdout7[ , !(names(holdout7) %in% drops)]
+#joint1 <- rbind(holdout1, holdout2)
+#joint2 <- rbind(holdout3, holdout4)
+#joint3 <- rbind(holdout5, holdout6)
+#joint4 <- rbind(joint1, joint2)
+#joint5 <- rbind(joint3, holdout7)
+#joint6 <- rbind(joint4, joint5)
+#write.csv(joint6,"./finalholdout.csv", row.names = FALSE)
+#drops1 <- c('ID')
+#holdoutdemo <- read.csv2("./finalholdout.csv", header=TRUE, sep = ",")
+#holdoutdemo = holdoutdemo[ , !(names(holdoutdemo) %in% drops1)]
+#holdoutdemo$tarp<-ifelse(holdoutdemo$Class=="Blue Tarp", "Yes", "No")
+#holdoutdemo$ID <- seq.int(nrow(holdoutdemo))
+#write.csv(holdoutdemo,"./finalholdout.csv", row.names = FALSE)
+#################End Cleaning####################
+
+set.seed(100)
+train.haiti <- sample.int(nrow(haiti_one), nrow(haiti_one)*0.75, replace=F)
+train.tarps <- haiti_one[train.haiti,]
+test.tarps <- haiti_one[-train.haiti,]
+train.tarps[complete.cases(train.tarps), ]
+#Threshold notes:
+#True Positive: People who need help get supplies
+#True Negative: Supplies are not wasted in a space where nobody is present to use them
+#False Positive: Supply is wasted and people don't access it.
+#False Negative: People who need help don't get supplies
+#I have decided that a false positive is the worst case scenario
+```
+
+*KNN*
+```{r}
+set.seed(100)
+haiti.tarp.knn.cv<-train(
+  tarp~Red+Green+Blue,
+  data=train.haiti.data,
+  method="knn",
+  preProcess=c("center", "scale"),
+  tuneGrid=data.frame(k=seq(1,20,1)),
+  trControl=trainControl(method="cv", number=10,
+                         returnResamp = 'all',
+                         savePredictions='final',
+                         classProbs=TRUE,
+                         allowParallel = TRUE)
+)
+haiti.tarp.knn.cv
+#K=9
+test.tarps$tarp.num <- ifelse(test.tarps$tarp=="Yes",
+                                    yes=1, no=0)
+knn.pred = predict(haiti.tarp.knn.cv, newdata = test.tarps)
+# Develop Confusion Matrix and assign it for later use
+knn_perf <- confusionMatrix(knn.pred, test.tarps$tarp, positive = "Yes")
+knn_perf
+# calculate the probabilities for use in ROC Curve
+knn_threshold <- 0.50
+# learned from Office Hours with Prof. Schwartz
+knn_folds_CM <- haiti.tarp.knn.cv$pred %>%
+  dplyr::mutate(pred2 = ifelse(Yes > knn_threshold, "Yes", "No")) %>%
+  dplyr::mutate(pred2 = factor(pred2, levels = c("No", "Yes"))) %>%
+  dplyr::group_split(Resample) %>%
+  purrr::map( ~ caret::confusionMatrix(data=.x$pred2, reference=.x$obs, positive="Yes"))
+# take a quick look at the folds
+knn_folds_CM
+# while there is sample variance, it does appear to be sufficiently small enough
+# that ultimately it will have less significance in our predictive power.
+knn.prob <- predict(haiti.tarp.knn.cv, newdata = test.tarps, type = "prob")
+# AUC is .9998
+colAUC(knn.prob, test.tarps$tarp.num, plotROC=TRUE)
+knn_AUC <- .9998255
+```
+
+*LDA*
+```{r}
+set.seed(100)
+haiti.tarp.lda<-train(
+  tarp~Red+Green+Blue,
+  data=train.tarps,
+  method="lda",
+  trControl=trainControl(method="cv", number=10, 
+                         savePredictions="final",
+                         classProbs = TRUE)
+)
+haiti.tarp.lda #.9845
+# find the predictions against test data
+lda.pred = predict(haiti.tarp.lda, newdata = test.tarps)
+# Develop Confusion Matrix and assign it for later use
+lda_perf <- confusionMatrix(lda.pred, test.tarps$tarp, positive = "Yes")
+lda_perf
+
+lda_folds_CM <- haiti.tarp.lda$pred %>%
+  dplyr::mutate(pred2 = ifelse(Yes > threshold, "Yes", "No")) %>%
+  dplyr::mutate(pred2 = factor(pred2, levels = c("No", "Yes"))) %>%
+  dplyr::group_split(Resample) %>%
+  purrr::map( ~ caret::confusionMatrix(data=.x$pred2, reference=.x$obs, positive="Yes"))
+# take a quick look at the folds' confusion matrices
+lda_folds_CM
+# results appear robust to sampling variance, though there are certainly small
+# differences in each fold.
+#Going to reduce the threshold to lower the false positive rate
+#False positive rate = 169/(169+15140) = .011
+#True positive rate = 401/(401+101) = .7988
+lda_perf$table
+# find the predictions against test data
+threshold = .7 #Choosing this threshold because it reduces false positives to <.01
+lda.pred2 = as.factor(ifelse(predict(haiti.tarp.lda, newdata = test.tarps, type = 'prob')$Yes>threshold, "Yes", "No"))
+# Develop Confusion Matrix and assign it for later use
+lda_perf2 <- confusionMatrix(lda.pred2, test.tarps$tarp, positive = "Yes")
+lda_perf2$table
+# for use in the ROC Curve
+lda.prob2 <- predict(haiti.tarp.lda, newdata = test.tarps, type = "prob")
+# AUC is .9885
+colAUC(lda.prob2, test.tarps$tarp.num, plotROC=TRUE)
+# store values for use in table later
+lda_AUC <-.9884695
+lda_threshold <- .7
+
+```
+*QDA*
+```{r}
+set.seed(100)
+haiti.tarp.qda<-train(
+  tarp~Red+Green+Blue,
+  data=train.tarps,
+  method="qda",
+  trControl=trainControl(method="cv", number=10, 
+                         savePredictions="final",
+                         classProbs = TRUE)
+)
+haiti.tarp.qda #.9946
+
+# find the predictions against test data
+qda.pred = predict(haiti.tarp.qda, newdata = test.tarps)
+# Develop Confusion Matrix and assign it for later use
+qda_perf <- confusionMatrix(qda.pred, test.tarps$tarp, positive = "Yes")
+qda_perf
+
+qda_folds_CM <- haiti.tarp.qda$pred %>%
+  dplyr::mutate(pred2 = ifelse(Yes > .5, "Yes", "No")) %>%
+  dplyr::mutate(pred2 = factor(pred2, levels = c("No", "Yes"))) %>%
+  dplyr::group_split(Resample) %>%
+  purrr::map( ~ caret::confusionMatrix(data=.x$pred2, reference=.x$obs, positive="Yes"))
+# take a quick look at the folds
+qda_folds_CM
+
+#With such a low false positive rate, I think we can lower the threshold a bit to raise the true positive rate
+threshold <- .1
+# find the predictions against test data
+qda.pred2 = as.factor(ifelse(predict(haiti.tarp.qda, newdata = test.tarps, type = 'prob')$Yes>threshold, "Yes", "No"))
+# Develop Confusion Matrix and assign it for later use
+qda_perf2 <- confusionMatrix(qda.pred2, test.tarps$tarp, positive = "Yes")
+qda_perf2$table
+qda_perf2
+# calculate the probabilities for use in ROC Curve
+qda.prob2 <- predict(haiti.tarp.qda, newdata = test.tarps, type = "prob")
+# AUC is .9933
+colAUC(qda.prob2, test.tarps$tarp.num, plotROC=TRUE)
+
+qda_threshold <- .1
+qda_AUC <- .9970982
+```
+
+*Logistic Regression*
+```{r}
+set.seed(100)
+haiti.tarp.glm <- train(
+  form = tarp~Red+Green+Blue,
+  data = train.tarps,
+  trControl = trainControl(method="cv", number=10,
+                           savePredictions='final',
+                           classProbs=TRUE),
+  method="glm",
+  family="binomial"
+)
+haiti.tarp.glm 
+# find the predictions against test data
+glm.pred = predict(haiti.tarp.glm, newdata = test.tarps)
+# Develop Confusion Matrix and assign it for later use
+glm_perf <- confusionMatrix(glm.pred, test.tarps$tarp, positive = "Yes")
+glm_perf
+
+glm_folds_CM <- haiti.tarp.glm$pred %>%
+  dplyr::mutate(pred2 = ifelse(Yes > .5, "Yes", "No")) %>%
+  dplyr::mutate(pred2 = factor(pred2, levels = c("No", "Yes"))) %>%
+  dplyr::group_split(Resample) %>%
+  purrr::map( ~ caret::confusionMatrix(data=.x$pred2, reference=.x$obs, positive="Yes"))
+glm_folds_CM
+#Want to raise the true positive rate a little
+threshold <- 0.20
+# find the predictions against test data
+glm.pred2 = as.factor(ifelse(predict(haiti.tarp.glm, newdata = test.tarps, type = 'prob')$Yes>threshold, "Yes", "No"))
+# Develop Confusion Matrix and assign it for later use
+glm_perf2 <- confusionMatrix(glm.pred2, test.tarps$tarp, positive="Yes")
+glm_perf2$table
+glm_perf2
+# calculatate the probabilities for use in ROC Curve
+glm.prob <- predict(haiti.tarp.glm, newdata = test.tarps, type = "prob")
+# AUC is .9901
+colAUC(glm.prob, test.tarps$tarp.num, plotROC=TRUE)
+glm_threshold <- .2
+glm_AUC <- .9988505
+```
+
+*Random Forest*
+```{r}
+set.seed(100)
+haiti.tarp.rf <- train(tarp~Red+Green+Blue, data=train.tarps, 
+                       method='rf', 
+                       importance=TRUE,
+                       tuneGrid=data.frame(mtry=c(1:3)),
+                       trControl=trainControl("cv", number=10, returnResamp = 'all', 
+                                              savePredictions = 'final', classProbs = TRUE,
+                         allowParallel = TRUE))
+haiti.tarp.rf
+rf.pred = predict(haiti.tarp.rf, newdata = test.tarps)
+# Develop Confusion Matrix and assign it for later use
+rf_perf <- confusionMatrix(rf.pred, test.tarps$tarp, positive="Yes")
+rf_perf
+rf_folds_CM <- haiti.tarp.rf$pred %>%
+  dplyr::mutate(pred2 = ifelse(Yes > threshold, "Yes", "No")) %>%
+  dplyr::mutate(pred2 = factor(pred2, levels = c("No", "Yes"))) %>%
+  dplyr::group_split(Resample) %>%
+  purrr::map( ~ caret::confusionMatrix(data=.x$pred2, reference=.x$obs, positive="Yes"))
+rf_folds_CM
+# calculate the probabilities for use in ROC Curve
+rf.prob <- predict(haiti.tarp.rf, newdata = test.tarps, type = "prob")
+# AUC is .9998
+colAUC(rf.prob, test.tarps$tarp.num, plotROC=TRUE)
+
+# prepare values for use in table 1
+rf_threshold <- .50
+rf_AUC <- .9997845
+```
+
+*SVM*
+```{r}
+set.seed(100)
+haiti.tarp.svm <- train(tarp~Red+Green+Blue, data = train.tarps,
+                        method="svmRadial",
+                        scale=FALSE,
+                        trControl=trainControl(method="cv", number=10,
+                                               returnResamp = 'all',
+                                               savePredictions = 'final',
+                                               classProbs = TRUE,
+                         allowParallel = TRUE),
+                        preProcess=c("center", "scale"),
+                        tuneGrid = data.frame(sigma=c(0.1, 0.25, 0.5, 1, 2),
+                                              C=c(0.1, 1, 5, 10, 100)))
+haiti.tarp.svm # sigma of 2, C of 100, accuracy 99.7%
+# find the predictions against test data
+svm.pred = predict(haiti.tarp.svm, newdata = test.tarps)
+# Develop Confusion Matrix and assign it for later use
+svm_perf <- confusionMatrix(svm.pred, test.tarps$tarp, positive = "Yes")
+svm_perf
+
+svm_folds_CM <- haiti.tarp.svm$pred %>%
+  dplyr::mutate(pred2 = ifelse(Yes > .5, "Yes", "No")) %>%
+  dplyr::mutate(pred2 = factor(pred2, levels = c("No", "Yes"))) %>%
+  dplyr::group_split(Resample) %>%
+  purrr::map( ~ caret::confusionMatrix(data=.x$pred2, reference=.x$obs, positive = "Yes"))
+svm_folds_CM
+# calculate the probabilities for use in ROC Curve
+svm.prob <- predict(haiti.tarp.svm, newdata = test.haiti.data, type = "prob")
+# AUC is .9997568
+colAUC(svm.prob, test.haiti.data$tarp.num, plotROC=TRUE)
+
+svm_threshold <- .5
+svm_AUC <- .9997568
+```
+
+*KNN Final*
+```{r}
+haitiholdout <- read.csv2("./finalholdout.csv", header=TRUE, sep = ",")
+is.factor(haitiholdout$tarp)
+haitiholdout$tarp<-as.factor(haitiholdout$tarp)
+is.factor(haitiholdout$tarp)
+
+knn.pred.holdout = predict(haiti.tarp.knn.cv, newdata = haitiholdout)
+# Develop Confusion Matrix and assign it for later use
+knn_perf.holdout <- confusionMatrix(knn.pred.holdout, haitiholdout$tarp, positive = "Yes")
+knn_perf.holdout
+knn.prob.holdout <- predict(haiti.tarp.knn.cv, newdata = haitiholdout, type = "prob")
+# AUC is 0.9642429
+colAUC(knn.prob.holdout, haitiholdout$tarp, plotROC=TRUE)
+```
+
+*LDA FINAL*
+```{r}
+lda.pred.holdout = as.factor(ifelse(predict(haiti.tarp.lda, newdata = haitiholdout, type = 'prob')$Yes>lda_threshold, "Yes", "No"))
+# Develop Confusion Matrix and assign it for later use
+lda.perf.holdout <- confusionMatrix(lda.pred.holdout, haitiholdout$tarp, positive = "Yes")
+lda.perf.holdout
+# ROC
+lda.prob.holdout <- predict(haiti.tarp.lda, newdata = haitiholdout, type = "prob")
+# AUC is .9921
+colAUC(lda.prob.holdout, haitiholdout$tarp, plotROC=TRUE)
+```
+
+*QDA FINAL*
+```{r}
+qda.pred.holdout = as.factor(ifelse(predict(haiti.tarp.qda, newdata = haitiholdout, type = 'prob')$Yes>qda_threshold, "Yes", "No"))
+# Develop Confusion Matrix and assign it for later use
+qda.perf.holdout <- confusionMatrix(qda.pred.holdout, haitiholdout$tarp, positive = "Yes")
+# qda.perf.fho$table
+qda.perf.holdout
+# ROC Curve
+qda.prob.holdout <- predict(haiti.tarp.qda, newdata = haitiholdout, type = "prob")
+# AUC is .9914521
+colAUC(qda.prob.holdout, haitiholdout$tarp, plotROC=TRUE)
+```
+
+*Logistic Regression Final*
+```{r}
+glm.pred.holdout = predict(haiti.tarp.glm, newdata = haitiholdout)
+# Develop Confusion Matrix and assign it for later use
+glm_perf.holdout <- confusionMatrix(glm.pred.holdout, haitiholdout$tarp, positive = "Yes")
+glm_perf.holdout
+# ROC Curve
+glm.prob.holdout <- predict(haiti.tarp.glm, newdata = haitiholdout, type = "prob")
+# AUC is .9994309
+colAUC(glm.prob.holdout, haitiholdout$tarp, plotROC=TRUE)
+```
+
+*Random Forest Final*
+```{r}
+rf.pred.holdout = predict(haiti.tarp.rf, newdata = haitiholdout)
+# Develop Confusion Matrix and assign it for later use
+rf_perf.holdout <- confusionMatrix(rf.pred.holdout, haitiholdout$tarp, positive = "Yes")
+rf_perf.holdout
+rf.prob.holdout <- predict(haiti.tarp.rf, newdata = haitiholdout, type = "prob")
+# AUC is 98%
+colAUC(rf.prob.holdout, haitiholdout$tarp, plotROC=TRUE)
+```
+
+*SVM FINAL*
+```{r}
+svm.pred.holdout = as.factor(ifelse(predict(haiti.tarp.svm, newdata = haitiholdout, type = 'prob')$Yes>svm_threshold, "Yes", "No"))
+# Develop Confusion Matrix and assign it for later use
+svm_perf.holdout <- confusionMatrix(svm.pred.holdout, haitiholdout$tarp, positive = "Yes")
+svm_perf.holdout
+# ROC Curve
+svm.prob.holdout <- predict(haiti.tarp.svm, newdata = haitiholdout, type = "prob")
+# AUC is .9456116
+colAUC(svm.prob.holdout, haitiholdout$tarp, plotROC=TRUE)
+```
